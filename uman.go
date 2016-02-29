@@ -27,7 +27,7 @@ type UserManager struct {
 	Request      *http.Request
 	Writer       http.ResponseWriter
 	Cookies      bool
-	Debuging     bool
+	Debugging    bool
 }
 
 const lifespan int64 = 3600
@@ -40,7 +40,7 @@ func New(databasePath string) *UserManager {
 	um := &UserManager{
 		DatabasePath: databasePath,
 		Sessions:     make(map[string]*Session),
-		Debuging:     true,
+		Debugging:    true,
 		Request:      nil,
 		Writer:       nil,
 		Cookies:      false,
@@ -55,7 +55,7 @@ func New(databasePath string) *UserManager {
  *
  **/
 func (um *UserManager) Debug(message string) {
-	if um.Debuging {
+	if um.Debugging {
 		fmt.Println("[UserManager]: " + message)
 	}
 }
