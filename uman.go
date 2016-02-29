@@ -26,7 +26,6 @@ type UserManager struct {
 	Sessions     map[string]*Session
 	Request      *http.Request
 	Writer       http.ResponseWriter
-	Cookies      bool
 	Debugging    bool
 }
 
@@ -43,11 +42,22 @@ func New(databasePath string) *UserManager {
 		Debugging:    true,
 		Request:      nil,
 		Writer:       nil,
-		Cookies:      false,
 	}
 
 	um.Reload()
 	return um
+}
+
+/**
+ * Constructor of Session.
+ *
+ **/
+func CreateSession() *Session {
+	return &Session{
+		User:      "",
+		Lifespan:  lifespan,
+		Timestamp: time.Now().Unix(),
+	}
 }
 
 /**
@@ -230,10 +240,11 @@ func (um *UserManager) CheckSessions() {
  * Uses SHA256 to hash a Session token (the sum of identifiers).
  *
  **/
-func (um *UserManager) HashSessionToken() string {
+func (um *UserManager) HashHTTPSessionToken() string {
 	hash := sha256.New()
-	hash.Write([]byte(um.Request.UserAgent() + um.Request.RemoteAddr))
 
+	hash.Write([]byte(um.Request.UserAgent() + um.Request.RemoteAddr))
+	
 	return hex.EncodeToString(hash.Sum(nil))
 }
 
@@ -273,39 +284,51 @@ func (um *UserManager) SetHTTPCookie(sess *Session) {
 	})
 }
 
+
 /**
- * Attempts to find an existing Session. If it exists, it validates the given cookie.
+ * This function is made for the cookie mode. It attempts to find an existing Session.
+ * If it exists, it validates the given cookie.
  * If vaildation fails it's like the Session never existed in the first place, having
  * a fresh one taking its place.
+ * Returns nil if there is no http.Request object (abstract mode is on).
  *
  **/
-func (um *UserManager) GetSession() *Session {
-	hash := um.HashSessionToken()
+func (um *UserManager) GetHTTPSession() *Session {
+	if um.Request == nil {
+		return nil
+	}
+
+	hash := um.HashHTTPSessionToken()
 
 	if sess, exists := um.Sessions[hash]; exists {
-		if um.Cookies {
-			userCookie, err := um.Request.Cookie("session")
+		userCookie, err := um.Request.Cookie("session")
 
-			if err == nil && userCookie.Value == sess.Cookie {
-				return sess
-			}
-		} else {
+		if err == nil && userCookie.Value == sess.Cookie {
 			return sess
 		}
 	}
 
-	um.Sessions[hash] = new(Session)
+	um.Sessions[hash] = CreateSession()
 	sess := um.Sessions[hash]
-	sess.User = ""
-	sess.Lifespan = lifespan
-	sess.Timestamp = time.Now().Unix()
-
-	if um.Cookies {
-		sess.Cookie = um.GenerateCookieHash()
-		um.SetHTTPCookie(sess)
-	}
+	
+	sess.Cookie = um.GenerateCookieHash()
+	um.SetHTTPCookie(sess)
 	
 	return sess
+}
+
+/**
+ * This function is made for the non cookie (abstract) mode. If a Session is not found
+ * a new one takes its place.
+ *
+ **/
+func (um *UserManager) GetSessionFromID(id string) *Session {
+	if sess, exists := um.Sessions[id]; exists {
+		return sess
+	}
+
+	um.Sessions[id] = CreateSession()
+	return um.Sessions[id]
 }
 
 /**
