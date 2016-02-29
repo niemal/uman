@@ -262,15 +262,13 @@ func (um *UserManager) GenerateCookieHash() string {
  *
  **/
 func (um *UserManager) SetHTTPCookie(sess *Session) {
-	cookie := &http.Cookie{
+	http.SetCookie(um.Writer, &http.Cookie{
 		Name:     "session",
 		Value:    sess.Cookie,
 		HttpOnly: true,
 		Expires:  time.Unix(sess.Timestamp + sess.Lifespan, 0),
 		MaxAge:   int(sess.Lifespan),
-	}
-
-	http.SetCookie(um.Writer, cookie)
+	})
 }
 
 /**
