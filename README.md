@@ -1,10 +1,10 @@
 # uman
 A hacky user manager, using a CSV format to store/load the database into/from a file.
-The idea is to create an abstract, as minimal as possible, user manager.
+The idea is to create an abstract yet adaptive, as minimal as possible, user manager.
 
 
 ## Examples
-A simple straight-forward usage.
+A simple straight-forward abstract usage.
 ```go
 package main
 
@@ -16,7 +16,9 @@ func main() {
 
 	// ... code ...
 
-	session := um.GetSession()
+	session := um.GetSessionFromID("some unique identifying info related to the user")
+	// session := um.GetHTTPSession() // == nil, there is no http.Request object.
+
 	um.Login("root", "mypass", session)
 	
 	// ... code ...
@@ -41,19 +43,16 @@ type Site struct {
 }
 
 func New() *Site {
-	site := &Site{
+	return &Site{
 		Router: gin.Default(),
-		Uman:   uman.New("my.db"),
+		Uman:   uman.New("/tmp/my.db"),
 	}
-
-	site.Cookies = true
-	return site
 }
 
 func (s *Site) Adapt(c *gin.Context) *uman.Session {
 	s.Uman.Writer = c.Writer
 	s.Uman.Request = c.Request
-	return s.Uman.GetSession() 
+	return s.Uman.GetHTTPSession() 
 }
 
 func (s *Site) Redirect(path string) {
@@ -77,7 +76,9 @@ func main() {
 	})
 
 	router.POST("/register", func (c *gin.Context) {
-		if session := site.Adapt(c); session.IsLogged() {
+		session := site.Adapt(c)
+
+		if session.IsLogged() {
 			site.Redirect("/" + session.User)
 			return
 		}
@@ -86,11 +87,11 @@ func main() {
 
 		result := false
 		if pass == repeat  {
-			result = site.UM.Register(user, pass)
+			result = site.Uman.Register(user, pass)
 		}
 
 		if result {
-			site.Uman.Login(user, pass)
+			site.Uman.Login(user, pass, session)
 			site.Redirect("/user/" + user)
 		}
 	})
@@ -99,10 +100,10 @@ func main() {
 		session := site.Adapt(c)
 		site.Uman.Login(c.PostForm("user"), c.PostForm("pass"), session)
 		
-		if !session.IsLogged() {
-			site.Redirect("/")
-		} else {
+		if session.IsLogged() {
 			site.Redirect("/user/" + session.User)
+		} else {
+			site.Redirect("/")
 		}
 		
 	})
