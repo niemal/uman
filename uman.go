@@ -26,6 +26,7 @@ type UserManager struct {
 	Sessions     map[string]*Session
 	Request      *http.Request
 	Writer       http.ResponseWriter
+	Cookies      bool
 	Debuging     bool
 }
 
@@ -42,6 +43,7 @@ func New(databasePath string) *UserManager {
 		Debuging:     true,
 		Request:      nil,
 		Writer:       nil,
+		Cookies:      false,
 	}
 
 	um.Reload()
@@ -133,22 +135,22 @@ func (um *UserManager) Reload() {
  * Registers a new User, writing both into the database file and the memory.
  *
  **/
-func (um *UserManager) Register(User string, pass string) bool {
-	if _, exists := um.Users[User]; exists {
+func (um *UserManager) Register(user string, pass string) bool {
+	if _, exists := um.Users[user]; exists {
 		return false
 	}
 
-	um.Users[User] = um.Hash([]byte(pass))
-	pass = string(um.Users[User])
+	um.Users[user] = um.Hash([]byte(pass))
+	pass = string(um.Users[user])
 
 	f, err := os.OpenFile(um.DatabasePath, os.O_APPEND|os.O_WRONLY, 0666)
 	defer f.Close()
 	um.Check(err)
 
-	_, err = f.WriteString(User + ":" + pass + "\n")
+	_, err = f.WriteString(user + ":" + pass + "\n")
 	um.Check(err)
 
-	um.Debug("Registered User[" + User + "] with password[" + pass + "].")
+	um.Debug("Registered user[" + user + "] with password[" + pass + "].")
 	return true
 }
 
@@ -281,9 +283,13 @@ func (um *UserManager) GetSession() *Session {
 	hash := um.HashSessionToken()
 
 	if sess, exists := um.Sessions[hash]; exists {
-		userCookie, err := um.Request.Cookie("session")
+		if um.Cookies {
+			userCookie, err := um.Request.Cookie("session")
 
-		if err == nil && userCookie.Value == sess.Cookie {
+			if err == nil && userCookie.Value == sess.Cookie {
+				return sess
+			}
+		} else {
 			return sess
 		}
 	}
@@ -293,9 +299,12 @@ func (um *UserManager) GetSession() *Session {
 	sess.User = ""
 	sess.Lifespan = lifespan
 	sess.Timestamp = time.Now().Unix()
-	sess.Cookie = um.GenerateCookieHash()
 
-	um.SetHTTPCookie(sess)
+	if um.Cookies {
+		sess.Cookie = um.GenerateCookieHash()
+		um.SetHTTPCookie(sess)
+	}
+	
 	return sess
 }
 
@@ -319,6 +328,7 @@ func (um *UserManager) Login(user string, pass string, sess *Session) bool {
  * Logs out the Session.
  *
  **/
-func (sess *Session) Logout() {
+func (um *UserManager) Logout(sess *Session) {
+	um.Debug("Logging out user[" + sess.User + "].")
 	sess.User = ""
 }
