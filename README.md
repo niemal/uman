@@ -63,7 +63,7 @@ func main() {
 	site := New()
 	site.Uman.Register("admin", "s3cr3t")
 
-	router.GET("/user/:name", func (c *gin.Context) {
+	site.Router.GET("/user/:name", func (c *gin.Context) {
 		user := c.Param("name")
 		session := site.Adapt(c)
 
@@ -75,7 +75,7 @@ func main() {
 		c.String(http.StatusOK, "Hello %s", user)
 	})
 
-	router.POST("/register", func (c *gin.Context) {
+	site.Router.POST("/register", func (c *gin.Context) {
 		session := site.Adapt(c)
 
 		if session.IsLogged() {
@@ -96,7 +96,7 @@ func main() {
 		}
 	})
 
-	router.POST("/login", func (c *gin.Context) {
+	site.Router.POST("/login", func (c *gin.Context) {
 		session := site.Adapt(c)
 		site.Uman.Login(c.PostForm("user"), c.PostForm("pass"), session)
 		
@@ -107,6 +107,8 @@ func main() {
 		}
 		
 	})
+
+	site.Router.Run(":8080")
 }
 ```
 
