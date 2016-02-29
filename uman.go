@@ -146,7 +146,7 @@ func (um *UserManager) Reload() {
  *
  **/
 func (um *UserManager) Register(user string, pass string) bool {
-	if _, exists := um.Users[user]; exists || user == "" {
+	if _, exists := um.Users[user]; exists || user == "" || pass == "" {
 		return false
 	}
 
@@ -173,7 +173,7 @@ func (um *UserManager) Register(user string, pass string) bool {
  *
  **/
 func (um *UserManager) ChangePass(User string, oldpass string, newpass string) bool {
-	if um.CheckHash(um.Users[User], []byte(oldpass)) {
+	if newpass != "" && um.CheckHash(um.Users[User], []byte(oldpass)) {
 		oldpass := string(um.Users[User])
 		um.Users[User] = um.Hash([]byte(newpass))
 		newpass = string(um.Users[User])
@@ -336,7 +336,7 @@ func (um *UserManager) GetSessionFromID(id string) *Session {
  *
  **/
 func (um *UserManager) Login(user string, pass string, sess *Session) bool {
-	if user != "" && um.CheckHash(um.Users[user], []byte(pass)) {
+	if user != "" && pass != "" && um.CheckHash(um.Users[user], []byte(pass)) {
 		sess.User = user
 
 		um.Debug("User[" + user + "] has logged in.")
