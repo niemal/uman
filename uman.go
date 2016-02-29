@@ -146,7 +146,7 @@ func (um *UserManager) Reload() {
  *
  **/
 func (um *UserManager) Register(user string, pass string) bool {
-	if _, exists := um.Users[user]; exists {
+	if _, exists := um.Users[user]; exists || user == "" {
 		return false
 	}
 
@@ -336,7 +336,7 @@ func (um *UserManager) GetSessionFromID(id string) *Session {
  *
  **/
 func (um *UserManager) Login(user string, pass string, sess *Session) bool {
-	if um.CheckHash(um.Users[user], []byte(pass)) {
+	if user != "" && um.CheckHash(um.Users[user], []byte(pass)) {
 		sess.User = user
 
 		um.Debug("User[" + user + "] has logged in.")
