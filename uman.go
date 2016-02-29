@@ -172,19 +172,19 @@ func (um *UserManager) Register(user string, pass string) bool {
  * doesn't exist.
  *
  **/
-func (um *UserManager) ChangePass(User string, oldpass string, newpass string) bool {
-	if newpass != "" && um.CheckHash(um.Users[User], []byte(oldpass)) {
-		oldpass := string(um.Users[User])
-		um.Users[User] = um.Hash([]byte(newpass))
-		newpass = string(um.Users[User])
+func (um *UserManager) ChangePass(user string, oldpass string, newpass string) bool {
+	if newpass != "" && um.CheckHash(um.Users[user], []byte(oldpass)) {
+		oldpass := string(um.Users[user])
+		um.Users[user] = um.Hash([]byte(newpass))
+		newpass = string(um.Users[user])
 
 		data, err := ioutil.ReadFile(um.DatabasePath)
 		um.Check(err)
 
 		lines := strings.Split(string(data), "\n")
 		for i, line := range lines {
-			if strings.Contains(line, User) && strings.Contains(line, oldpass) {
-				lines[i] = User + ":" + newpass
+			if strings.Contains(line, user) && strings.Contains(line, oldpass) {
+				lines[i] = user + ":" + newpass
 				break
 			}
 		}
@@ -193,12 +193,12 @@ func (um *UserManager) ChangePass(User string, oldpass string, newpass string) b
 		err = ioutil.WriteFile(um.DatabasePath, []byte(output), 0666)
 		um.Check(err)
 
-		um.Debug("Changed the password of User[" + User + "],\n\t" +
+		um.Debug("Changed the password of user[" + user + "],\n\t" +
 			"from[" + oldpass + "] to[" + newpass + "].")
 		return true
 	}
 
-	um.Debug("Failed to change the password of User[" + User + "].")
+	um.Debug("Failed to change the password of User[" + user + "].")
 	return false
 }
 

@@ -1,0 +1,53 @@
+{{ define "login.tmpl" }}
+<!DOCTYPE html><html>
+<head>
+	<title>Come login</title>
+</head>
+
+<body>
+	<p>This is the right way, {{ .ip }}.</p>
+	<form method="POST" action="/login">
+		<label for="name">Username</label>
+		<input type="text" name="user">
+
+		<label for="pass">Password</label>
+		<input type="password" name="pass">
+
+		<input type="submit" value="Submit">
+	</form>
+
+	<p>No account?</p><a href="/register">Register</a>
+</body>
+
+</html>
+{{ end }}
+
+{{ define "register.tmpl" }}
+<!DOCTYPE html><html>
+<head>
+	<title>Come register</title>
+</head>
+
+<body>
+	<p>This is the right way, {{ .ip }}.</p>
+	{{ if .success }}
+	<p>You have registered successfully mister {{ .user }}.</p>
+	<a href="/">Go back home</a>
+	{{ else }}
+	<form method="POST" action="/register">
+		<label for="name">Username</label>
+		<input type="text" name="user">
+
+		<label for="pass">Password</label>
+		<input type="password" name="pass">
+
+		<label for="repeat">Repeat Password</label>
+		<input type="password" name="repeat">
+
+		<input type="submit" value="Submit">
+	</form>
+	{{ end }}
+</body>
+
+</html>
+{{ end }}

@@ -1,0 +1,22 @@
+{{ define "index.tmpl" }}
+<!DOCTYPE html><html>
+<head>
+	{{ if .logged }}
+	<title>Cute</title>
+	{{ else }}
+	<title>Gotta login</title>
+	{{ end }}
+</head>
+
+<body>
+	<p>Greetings {{ .user }}.</p>
+	{{ if .logged }}
+	<a href="/logout">Logout</a>
+	{{ else }}
+	<a href="/login">Login</a>
+	<p>or</p>
+	<a href="/register">Register</a>
+	{{ end }}
+</body>
+</html>
+{{ end }}
