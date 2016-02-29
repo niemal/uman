@@ -1,10 +1,12 @@
 # uman
 A hacky user manager, using a CSV format to store/load the database into/from a file.
-The idea is to create an abstract yet adaptive, as minimal as possible, user manager.
-
+The idea is to create an abstract yet adaptive, as minimal as possible, full-backend user manager.
+Handling user management under the actual server software might come in handy and *fast*.
 
 ## Examples
-A simple straight-forward abstract usage.
+Feel free to build the tests by `cd tests; go build` and play around yourself.
+
+A simple straight-forward abstract usage:
 ```go
 package main
 
@@ -27,7 +29,7 @@ func main() {
 }
 ```
 
-An implemenetation with cookies and [gin](https://github.com/gin-gonic/gin).
+An implemenetation with cookies and [gin](https://github.com/gin-gonic/gin):
 ```go
 package main
 
