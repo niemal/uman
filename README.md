@@ -95,6 +95,23 @@ type Session struct {
 If a user is not logged in then the `Session.User` is just an empty string, otherwise it's the user's name.
 If `GetHTTPSession()` is not being used then the `Session.Cookie` will always be an empty string.
 
+Functions related:
+
+```go
+func (sess *Session) SetLifespan(seconds int)
+```
+Sets the lifespan of a session.
+
+```go
+func (sess *Session) IsLogged() bool
+```
+Checks if the session holds a logged user.
+
+```go
+func (um *UserManager) Logout(sess *Session)
+```
+Logs a session out (does not destroy the session).
+
 
 ## Examples
 Feel free to build the tests with `cd tests; go build` and edit them locally to perceive the behaviour.
