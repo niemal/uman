@@ -74,10 +74,11 @@ One given the same IP as a victim and by also knowing the victim's user agent th
 ### Session struct
 ```go
 type Session struct {
-	User      string
-	Timestamp int64
-	Lifespan  int64
-	Cookie    string
+	User       string
+	Timestamp  int64
+	Lifespan   int64
+	Cookie     string
+	CookiePath string
 }
 ```
 If a user is not logged in then the `Session.User` is just an empty string, otherwise it's the user's name.
@@ -87,7 +88,7 @@ Functions related:
 ```go
 func (sess *Session) SetHTTPCookie(w http.ResponseWriter)
 ```
-Sets the appropriate cookie.
+Sets the appropriate cookie. You may set a `Session.CookiePath` (default is "/") before using `Session.SetHTTPCookie()`.
 
 ```go
 func (sess *Session) SetLifespan(seconds int)
