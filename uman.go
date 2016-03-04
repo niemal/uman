@@ -14,10 +14,11 @@ import (
 )
 
 type Session struct {
-	User      string
-	Timestamp int64
-	Lifespan  int64
-	Cookie    string
+	User       string
+	Timestamp  int64
+	Lifespan   int64
+	Cookie     string
+	CookiePath string
 }
 
 type UserManager struct {
@@ -36,9 +37,10 @@ const lifespan int64 = 3600
  **/
 func CreateSession() *Session {
 	return &Session{
-		User:      "",
-		Lifespan:  lifespan,
-		Timestamp: time.Now().Unix(),
+		User:       "",
+		CookiePath: "/",
+		Lifespan:   lifespan,
+		Timestamp:  time.Now().Unix(),
 	}
 }
 
@@ -49,6 +51,7 @@ func CreateSession() *Session {
 func (sess *Session) SetHTTPCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session",
+		Path:     sess.CookiePath,
 		Value:    sess.Cookie,
 		HttpOnly: true,
 		Expires:  time.Unix(sess.Timestamp + sess.Lifespan, 0),
