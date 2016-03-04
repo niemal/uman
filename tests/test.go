@@ -4,31 +4,23 @@ import (
 	"github.com/niemal/uman"
 	"github.com/gin-gonic/gin"
 	"net/http"
+	"strconv"
 )
 
 type Callbacks map[string]func(c *gin.Context)
 
-type Site struct {
-	Uman       *uman.UserManager
-	GetRoutes  Callbacks
-	PostRoutes Callbacks
-	Engine     *gin.Engine
-	Port       string
-}
+func main() {
+	router := gin.Default()
+	router.LoadHTMLGlob("templates/*")
 
-func New() *Site {
-	site := &Site{
-		Uman: uman.New("my.db"),
-		Engine: gin.Default(),
-		Port: "8080",
-	}
+	port := "8080"
 
-	site.Uman.Register("admin", "test")
-	site.Engine.LoadHTMLGlob("templates/*")
+	um := uman.New("my.db")
+	um.Register("admin", "test")
 
-	site.GetRoutes = Callbacks{
+	GetRoutes := Callbacks{
 		"/": func (c *gin.Context) {
-			session := site.Adapt(c)
+			session := um.GetHTTPSession(c.Writer, c.Request)
 			logged := session.IsLogged()
 
 			var user string
@@ -45,8 +37,10 @@ func New() *Site {
 		},
 
 		"/login": func (c *gin.Context) {
-			if site.Adapt(c).IsLogged() {
-				site.Redirect("/")
+			session := um.GetHTTPSession(c.Writer, c.Request)
+			
+			if session.IsLogged() {
+				http.Redirect(c.Writer, c.Request, "/", 302)
 				return
 			}
 
@@ -56,8 +50,10 @@ func New() *Site {
 		},
 
 		"/register": func (c *gin.Context) {
-			if site.Adapt(c).IsLogged() {
-				site.Redirect("/")
+			session := um.GetHTTPSession(c.Writer, c.Request)
+
+			if session.IsLogged() {
+				http.Redirect(c.Writer, c.Request, "/", 302)
 				return
 			}
 			
@@ -67,23 +63,33 @@ func New() *Site {
 		},
 
 		"/logout": func (c *gin.Context) {
-			site.Uman.Logout(site.Adapt(c))
-			site.Redirect("/")
+			um.GetHTTPSession(c.Writer, c.Request).Logout()
+			http.Redirect(c.Writer, c.Request, "/", 302)
 		},
 	}
 
-	site.PostRoutes = Callbacks{
+	PostRoutes := Callbacks{
 		"/login": func (c *gin.Context) {
-			if session := site.Adapt(c); !session.IsLogged() {
-				site.Uman.Login(c.PostForm("user"), c.PostForm("pass"), session)
+			if session := um.GetHTTPSession(c.Writer, c.Request); !session.IsLogged() {
+				um.Login(c.PostForm("user"), c.PostForm("pass"), session)
+
+				if session.IsLogged() {
+					lifespan, err := strconv.Atoi(c.PostForm("session_lifespan"))
+					um.Check(err)
+
+					if lifespan > 0  && lifespan < 86401 {
+						session.SetLifespan(lifespan)
+						session.SetHTTPCookie(c.Writer)
+					}
+				}
 			}
 
-			site.Redirect("/")
+			http.Redirect(c.Writer, c.Request, "/", 302)
 		},
 
 		"/register": func (c *gin.Context) {
-			if site.Adapt(c).IsLogged() {
-				site.Redirect("/")
+			if um.GetHTTPSession(c.Writer, c.Request).IsLogged() {
+				http.Redirect(c.Writer, c.Request, "/", 302)
 				return
 			}
 
@@ -91,7 +97,7 @@ func New() *Site {
 
 			result := false
 			if pass == repeat  {
-				result = site.Uman.Register(user, pass)
+				result = um.Register(user, pass)
 			}
 
 			c.HTML(http.StatusOK, "register.tmpl", gin.H{
@@ -102,32 +108,13 @@ func New() *Site {
 		},
 	}
 
-	return site
-}
-
-func (s *Site) Run() {
-	for route, callback := range s.GetRoutes {
-		s.Engine.GET(route, callback)
+	for route, callback := range GetRoutes {
+		router.GET(route, callback)
 	}
 
-	for route, callback := range s.PostRoutes {
-		s.Engine.POST(route, callback)
+	for route, callback := range PostRoutes {
+		router.POST(route, callback)
 	}
 
-	s.Engine.Run(":" + s.Port)
-}
-
-func (s *Site) Adapt(c *gin.Context) *uman.Session {
-	s.Uman.Writer = c.Writer
-	s.Uman.Request = c.Request
-	return s.Uman.GetHTTPSession()
-}
-
-func (s *Site) Redirect(path string) {
-	http.Redirect(s.Uman.Writer, s.Uman.Request, path, 302)
-}
-
-func main() {
-	site := New()
-	site.Run()
+	router.Run(":" + port)
 }
