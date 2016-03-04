@@ -21,32 +21,14 @@ type Session struct {
 }
 
 type UserManager struct {
-	Users        map[string][]byte
-	DatabasePath string
-	Sessions     map[string]*Session
-	Request      *http.Request
-	Writer       http.ResponseWriter
-	Debugging    bool
+	Users         map[string][]byte
+	DatabasePath  string
+	Sessions      map[string]*Session
+	CheckDelay    int
+	Debugging     bool
 }
 
 const lifespan int64 = 3600
-
-/**
- * Constructor of UserManager.
- *
- **/
-func New(databasePath string) *UserManager {
-	um := &UserManager{
-		DatabasePath: databasePath,
-		Sessions:     make(map[string]*Session),
-		Debugging:    true,
-		Request:      nil,
-		Writer:       nil,
-	}
-
-	um.Reload()
-	return um
-}
 
 /**
  * Constructor of Session.
@@ -58,6 +40,67 @@ func CreateSession() *Session {
 		Lifespan:  lifespan,
 		Timestamp: time.Now().Unix(),
 	}
+}
+
+/**
+ * Sets the HTTP cookie given the http.ResponseWriter.
+ *
+ **/
+func (sess *Session) SetHTTPCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session",
+		Value:    sess.Cookie,
+		HttpOnly: true,
+		Expires:  time.Unix(sess.Timestamp + sess.Lifespan, 0),
+		MaxAge:   int(sess.Lifespan),
+	})
+}
+
+/**
+ * Logs out the Session.
+ *
+ **/
+func (sess *Session) Logout() {
+	sess.User = ""
+}
+
+/**
+ * Changes the lifespan of a Session.
+ * Mainly exists to handle the typecasting between int and int64.
+ *
+ **/
+func (sess *Session) SetLifespan(seconds int) {
+	sess.Lifespan = int64(seconds)
+}
+
+/**
+ * Checks if a Session is logged.
+ *
+ **/
+func (sess *Session) IsLogged() bool {
+	if sess.User != "" {
+		return true
+	}
+
+	return false
+}
+
+/**
+ * Constructor of UserManager.
+ *
+ **/
+func New(databasePath string) *UserManager {
+	um := &UserManager{
+		DatabasePath: databasePath,
+		Sessions:     make(map[string]*Session),
+		Debugging:    true,
+		CheckDelay:   60,
+	}
+
+	um.Reload()
+	go um.CheckSessions()
+
+	return um
 }
 
 /**
@@ -203,36 +246,19 @@ func (um *UserManager) ChangePass(user string, oldpass string, newpass string) b
 }
 
 /**
- * Changes the lifespan of a Session.
- * Mainly exists to handle the typecasting between int and int64.
- *
- **/
-func (sess *Session) SetLifespan(seconds int) {
-	sess.Lifespan = int64(seconds)
-}
-
-/**
- * Checks if a Session is logged.
- *
- **/
-func (sess *Session) IsLogged() bool {
-	if sess.User != "" {
-		return true
-	}
-
-	return false
-}
-
-/**
  * Checks for expired Sessions.
  *
  **/
 func (um *UserManager) CheckSessions() {
-	for hash, sess := range um.Sessions {
-		if sess.Timestamp+sess.Lifespan < time.Now().Unix() {
-			um.Debug("Session[" + hash + "] has expired.")
-			delete(um.Sessions, hash)
+	for {
+		for hash, sess := range um.Sessions {
+			if sess.Timestamp+sess.Lifespan < time.Now().Unix() {
+				um.Debug("Session[" + hash + "] has expired.")
+				delete(um.Sessions, hash)
+			}
 		}
+
+		time.Sleep(time.Duration(um.CheckDelay) * time.Second)
 	}
 }
 
@@ -240,10 +266,9 @@ func (um *UserManager) CheckSessions() {
  * Uses SHA256 to hash a Session token (the sum of identifiers).
  *
  **/
-func (um *UserManager) HashHTTPSessionToken() string {
+func (um *UserManager) HashHTTPSessionToken(ua string, ip string) string {
 	hash := sha256.New()
-
-	hash.Write([]byte(um.Request.UserAgent() + um.Request.RemoteAddr))
+	hash.Write([]byte(ua + ip))
 	
 	return hex.EncodeToString(hash.Sum(nil))
 }
@@ -271,37 +296,22 @@ func (um *UserManager) GenerateCookieHash() string {
 }
 
 /**
- * Sets the HTTP cookie given the Session.
+ * This function is made for HTTP oriented sessions.
+ * It attempts to find an existing Session. If it exists, it validates
+ * the given cookie (from the Request). If vaildation fails it's like the
+ * Session never existed in the first place, having a fresh one taking its
+ * place. Returns nil if http.Request or http.ResponseWriter are nil.
  *
  **/
-func (um *UserManager) SetHTTPCookie(sess *Session) {
-	http.SetCookie(um.Writer, &http.Cookie{
-		Name:     "session",
-		Value:    sess.Cookie,
-		HttpOnly: true,
-		Expires:  time.Unix(sess.Timestamp + sess.Lifespan, 0),
-		MaxAge:   int(sess.Lifespan),
-	})
-}
-
-
-/**
- * This function is made for the cookie mode. It attempts to find an existing Session.
- * If it exists, it validates the given cookie.
- * If vaildation fails it's like the Session never existed in the first place, having
- * a fresh one taking its place.
- * Returns nil if there is no http.Request object (abstract mode is on).
- *
- **/
-func (um *UserManager) GetHTTPSession() *Session {
-	if um.Request == nil {
+func (um *UserManager) GetHTTPSession(w http.ResponseWriter, r *http.Request) *Session {
+	if r == nil || w == nil {
 		return nil
 	}
 
-	hash := um.HashHTTPSessionToken()
+	hash := um.HashHTTPSessionToken(r.UserAgent(), r.RemoteAddr)
 
 	if sess, exists := um.Sessions[hash]; exists {
-		userCookie, err := um.Request.Cookie("session")
+		userCookie, err := r.Cookie("session")
 
 		if err == nil && userCookie.Value == sess.Cookie {
 			return sess
@@ -312,14 +322,14 @@ func (um *UserManager) GetHTTPSession() *Session {
 	sess := um.Sessions[hash]
 	
 	sess.Cookie = um.GenerateCookieHash()
-	um.SetHTTPCookie(sess)
+	sess.SetHTTPCookie(w)
 	
 	return sess
 }
 
 /**
- * This function is made for the non cookie (abstract) mode. If a Session is not found
- * a new one takes its place.
+ * This function is made for the non cookie (abstract) mode. If a Session is not
+ * found a new one takes its place.
  *
  **/
 func (um *UserManager) GetSessionFromID(id string) *Session {
@@ -345,13 +355,4 @@ func (um *UserManager) Login(user string, pass string, sess *Session) bool {
 
 	um.Debug("User[" + user + "] failed to log in.")
 	return false
-}
-
-/**
- * Logs out the Session.
- *
- **/
-func (um *UserManager) Logout(sess *Session) {
-	um.Debug("Logging out user[" + sess.User + "].")
-	sess.User = ""
 }
