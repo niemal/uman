@@ -1,5 +1,5 @@
 # uman
-A hacky user manager, using a CSV format to store/load the database into/from a file.
+A hacky user manager, using a "CSV"-like format (`user:passhash\n`) to store/load the database into/from a file.
 The idea is to create an abstract yet adaptive, as minimal as possible, full-backend user manager.
 Handling user management under the actual server software might come in handy and *fast*.
 
