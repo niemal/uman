@@ -311,7 +311,13 @@ func (um *UserManager) GetHTTPSession(w http.ResponseWriter, r *http.Request) *S
 		return nil
 	}
 
-	chopped := strings.SplitN(r.RemoteAddr, ":", 2)
+	sep := ":"
+	if strings.Contains(r.RemoteAddr, "%") {
+		// it's ipv6
+		sep = "%"
+	}
+
+	chopped := strings.SplitN(r.RemoteAddr, sep, 2)
 	ip := ""
 
 	if len(chopped) > 1 {
