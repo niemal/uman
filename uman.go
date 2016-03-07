@@ -311,7 +311,14 @@ func (um *UserManager) GetHTTPSession(w http.ResponseWriter, r *http.Request) *S
 		return nil
 	}
 
-	hash := um.HashHTTPSessionToken(r.UserAgent(), r.RemoteAddr)
+	chopped := strings.SplitN(r.RemoteAddr, ":", 2)
+	ip := ""
+
+	if len(chopped) > 1 {
+		ip = chopped[0]
+	}
+
+	hash := um.HashHTTPSessionToken(r.UserAgent(), ip)
 
 	if sess, exists := um.Sessions[hash]; exists {
 		userCookie, err := r.Cookie("session")
