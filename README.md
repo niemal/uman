@@ -6,7 +6,7 @@ Handling user management under the actual server software might come in handy an
 
 ## API
 
-### Initializing
+### Initialising
 One would need to call the constructor, which is the function below.
 A string must be passed which states the database path to be created or used (both hanlded internally).
 ```go
@@ -16,12 +16,15 @@ func New(databasePath string) *UserManager
 The UserManager struct:
 ```go
 type UserManager struct {
-	Users         map[string][]byte
-	DatabasePath  string
-	Sessions      map[string]*Session
-	CheckDelay    int
-	Debugging     bool
+	Users          map[string][]byte
+	DatabasePath   string
+	Sessions       map[string]*Session
+	CheckDelay     int
+	SessionsMutex  bool
+	UsersMutex     bool
+	Debugging      bool
 }
+
 ```
 
 `CheckDelay` states the cooldown of the thread responsible for handling session cleanup. Can be changed after initialization.
