@@ -22,14 +22,17 @@ type Session struct {
 }
 
 type UserManager struct {
-	Users         map[string][]byte
-	DatabasePath  string
-	Sessions      map[string]*Session
-	CheckDelay    int
-	Debugging     bool
+	Users          map[string][]byte
+	DatabasePath   string
+	Sessions       map[string]*Session
+	CheckDelay     int
+	SessionsMutex  bool
+	UsersMutex     bool
+	Debugging      bool
 }
 
 const lifespan int64 = 3600
+
 
 /**
  * Constructor of Session.
@@ -94,16 +97,29 @@ func (sess *Session) IsLogged() bool {
  **/
 func New(databasePath string) *UserManager {
 	um := &UserManager{
-		DatabasePath: databasePath,
-		Sessions:     make(map[string]*Session),
-		Debugging:    true,
-		CheckDelay:   60,
+		DatabasePath:  databasePath,
+		Sessions:      make(map[string]*Session),
+		Debugging:     true,
+		CheckDelay:    60,
+		SessionsMutex: false,
+		UsersMutex:    false,
 	}
 
 	um.Reload()
 	go um.CheckSessions()
 
 	return um
+}
+
+
+/**
+ * Locks the running thread.
+ *
+ **/
+func (um *UserManager) Lock(mutex *bool) {
+	um.Debug("Thread is locked.")
+	for *mutex { time.Sleep(time.Duration(1) * time.Second) }
+	um.Debug("Thread is Unlocked.")
 }
 
 /**
@@ -168,6 +184,9 @@ func (um *UserManager) Check(err error) {
  *
  **/
 func (um *UserManager) Reload() {
+	um.Lock(&um.UsersMutex)
+	um.UsersMutex = true
+
 	um.Users = make(map[string][]byte) // reset
 
 	data, err := ioutil.ReadFile(um.DatabasePath)
@@ -185,6 +204,8 @@ func (um *UserManager) Reload() {
 
 		um.Users[creds[0]] = []byte(creds[1])
 	}
+
+	um.UsersMutex = false
 }
 
 /**
@@ -196,7 +217,11 @@ func (um *UserManager) Register(user string, pass string) bool {
 		return false
 	}
 
+	um.Lock(&um.UsersMutex)
+	um.UsersMutex = true
 	um.Users[user] = um.Hash([]byte(pass))
+	um.UsersMutex = false
+
 	pass = string(um.Users[user])
 
 	f, err := os.OpenFile(um.DatabasePath, os.O_APPEND|os.O_WRONLY, 0666)
@@ -221,7 +246,12 @@ func (um *UserManager) Register(user string, pass string) bool {
 func (um *UserManager) ChangePass(user string, oldpass string, newpass string) bool {
 	if newpass != "" && um.CheckHash(um.Users[user], []byte(oldpass)) {
 		oldpass := string(um.Users[user])
+
+		um.Lock(&um.UsersMutex)
+		um.UsersMutex = true
 		um.Users[user] = um.Hash([]byte(newpass))
+		um.UsersMutex = false
+
 		newpass = string(um.Users[user])
 
 		data, err := ioutil.ReadFile(um.DatabasePath)
@@ -256,8 +286,13 @@ func (um *UserManager) CheckSessions() {
 	for {
 		for hash, sess := range um.Sessions {
 			if sess.Timestamp+sess.Lifespan < time.Now().Unix() {
+				um.Lock(&um.SessionsMutex)
+				um.SessionsMutex = true
+
 				um.Debug("Session[" + hash + "] has expired.")
 				delete(um.Sessions, hash)
+
+				um.SessionsMutex = false
 			}
 		}
 
@@ -334,7 +369,11 @@ func (um *UserManager) GetHTTPSession(w http.ResponseWriter, r *http.Request) *S
 		}
 	}
 
+	um.Lock(&um.SessionsMutex)
+	um.SessionsMutex = true
 	um.Sessions[hash] = CreateSession()
+	um.SessionsMutex = false
+
 	sess := um.Sessions[hash]
 	
 	sess.Cookie = um.GenerateCookieHash()
@@ -353,7 +392,11 @@ func (um *UserManager) GetSessionFromID(id string) *Session {
 		return sess
 	}
 
+	um.Lock(&um.SessionsMutex)
+	um.SessionsMutex = true
 	um.Sessions[id] = CreateSession()
+	um.SessionsMutex = false
+
 	return um.Sessions[id]
 }
 
