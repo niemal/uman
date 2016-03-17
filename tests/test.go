@@ -1,13 +1,13 @@
 package main
 
 import (
-	"github.com/niemal/uman"
 	"github.com/gin-gonic/gin"
+	"github.com/niemal/uman"
 	"net/http"
 	"strconv"
 )
 
-type Callbacks map[string]func(c *gin.Context)
+type callbacks map[string]func(c *gin.Context)
 
 func main() {
 	router := gin.Default()
@@ -18,8 +18,8 @@ func main() {
 	um := uman.New("my.db")
 	um.Register("admin", "test")
 
-	GetRoutes := Callbacks{
-		"/": func (c *gin.Context) {
+	getRoutes := callbacks{
+		"/": func(c *gin.Context) {
 			session := um.GetHTTPSession(c.Writer, c.Request)
 			logged := session.IsLogged()
 
@@ -31,14 +31,14 @@ func main() {
 			}
 
 			c.HTML(http.StatusOK, "index.tmpl", gin.H{
-				"user": user,
+				"user":   user,
 				"logged": logged,
 			})
 		},
 
-		"/login": func (c *gin.Context) {
+		"/login": func(c *gin.Context) {
 			session := um.GetHTTPSession(c.Writer, c.Request)
-			
+
 			if session.IsLogged() {
 				http.Redirect(c.Writer, c.Request, "/", 302)
 				return
@@ -49,35 +49,34 @@ func main() {
 			})
 		},
 
-		"/register": func (c *gin.Context) {
+		"/register": func(c *gin.Context) {
 			session := um.GetHTTPSession(c.Writer, c.Request)
 
 			if session.IsLogged() {
 				http.Redirect(c.Writer, c.Request, "/", 302)
 				return
 			}
-			
+
 			c.HTML(http.StatusOK, "register.tmpl", gin.H{
 				"ip": c.Request.RemoteAddr,
 			})
 		},
 
-		"/logout": func (c *gin.Context) {
+		"/logout": func(c *gin.Context) {
 			um.GetHTTPSession(c.Writer, c.Request).Logout()
 			http.Redirect(c.Writer, c.Request, "/", 302)
 		},
 	}
 
-	PostRoutes := Callbacks{
-		"/login": func (c *gin.Context) {
+	postRoutes := callbacks{
+		"/login": func(c *gin.Context) {
 			if session := um.GetHTTPSession(c.Writer, c.Request); !session.IsLogged() {
 				um.Login(c.PostForm("user"), c.PostForm("pass"), session)
 
 				if session.IsLogged() {
 					lifespan, err := strconv.Atoi(c.PostForm("session_lifespan"))
-					um.Check(err)
 
-					if lifespan > 0  && lifespan < 86401 {
+					if err == nil && lifespan > 0 && lifespan < 86401 {
 						session.SetLifespan(lifespan)
 						session.SetHTTPCookie(c.Writer)
 					}
@@ -87,7 +86,7 @@ func main() {
 			http.Redirect(c.Writer, c.Request, "/", 302)
 		},
 
-		"/register": func (c *gin.Context) {
+		"/register": func(c *gin.Context) {
 			if um.GetHTTPSession(c.Writer, c.Request).IsLogged() {
 				http.Redirect(c.Writer, c.Request, "/", 302)
 				return
@@ -96,7 +95,7 @@ func main() {
 			user, pass, repeat := c.PostForm("user"), c.PostForm("pass"), c.PostForm("repeat")
 
 			result := false
-			if pass == repeat  {
+			if pass == repeat {
 				result = um.Register(user, pass)
 			}
 
@@ -108,11 +107,11 @@ func main() {
 		},
 	}
 
-	for route, callback := range GetRoutes {
+	for route, callback := range getRoutes {
 		router.GET(route, callback)
 	}
 
-	for route, callback := range PostRoutes {
+	for route, callback := range postRoutes {
 		router.POST(route, callback)
 	}
 

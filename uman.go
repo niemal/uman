@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+// Session is a structure representing what its name implies.
+//
 type Session struct {
 	User       string
 	Timestamp  int64
@@ -21,24 +23,10 @@ type Session struct {
 	CookiePath string
 }
 
-type UserManager struct {
-	Users          map[string][]byte
-	DatabasePath   string
-	Sessions       map[string]*Session
-	CheckDelay     int
-	SessionsMutex  bool
-	UsersMutex     bool
-	Debugging      bool
-}
-
 const lifespan int64 = 3600
 
-
-/**
- * Constructor of Session.
- *
- **/
-func CreateSession() *Session {
+// Constructor of Session.
+func createSession() *Session {
 	return &Session{
 		User:       "",
 		CookiePath: "/",
@@ -47,42 +35,34 @@ func CreateSession() *Session {
 	}
 }
 
-/**
- * Sets the HTTP cookie given the http.ResponseWriter.
- *
- **/
+// SetHTTPCookie sets the HTTP cookie given the http.ResponseWriter.
+//
 func (sess *Session) SetHTTPCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session",
 		Path:     sess.CookiePath,
 		Value:    sess.Cookie,
 		HttpOnly: true,
-		Expires:  time.Unix(sess.Timestamp + sess.Lifespan, 0),
+		Expires:  time.Unix(sess.Timestamp+sess.Lifespan, 0),
 		MaxAge:   int(sess.Lifespan),
 	})
 }
 
-/**
- * Logs out the Session.
- *
- **/
+// Logout logs the session out!
+//
 func (sess *Session) Logout() {
 	sess.User = ""
 }
 
-/**
- * Changes the lifespan of a Session.
- * Mainly exists to handle the typecasting between int and int64.
- *
- **/
+// SetLifespan changes the lifespan of a Session.
+// Mainly exists to handle the typecasting between int and int64.
+//
 func (sess *Session) SetLifespan(seconds int) {
 	sess.Lifespan = int64(seconds)
 }
 
-/**
- * Checks if a Session is logged.
- *
- **/
+// IsLogged checks if the Session holds a user.
+//
 func (sess *Session) IsLogged() bool {
 	if sess.User != "" {
 		return true
@@ -91,208 +71,92 @@ func (sess *Session) IsLogged() bool {
 	return false
 }
 
-/**
- * Constructor of UserManager.
- *
- **/
-func New(databasePath string) *UserManager {
+// UserManager is the backbone, holding all the goods.
+//
+type UserManager struct {
+	CheckDelay    int
+	Debug         bool
+	users         map[string][]byte
+	sessions      map[string]*Session
+	databasePath  string
+	sessionsMutex bool
+	usersMutex    bool
+}
+
+// New is the constructor of UserManager.
+//
+func New(dbPath string) *UserManager {
 	um := &UserManager{
-		DatabasePath:  databasePath,
-		Sessions:      make(map[string]*Session),
-		Debugging:     true,
+		Debug:         true,
 		CheckDelay:    60,
-		SessionsMutex: false,
-		UsersMutex:    false,
+		databasePath:  dbPath,
+		sessions:      make(map[string]*Session),
+		sessionsMutex: false,
+		usersMutex:    false,
 	}
 
-	um.Reload()
-	go um.CheckSessions()
+	um.reload()
+	go um.checkSessions()
 
 	return um
 }
 
-
-/**
- * Locks the running thread to prevent race conditions.
- *
- **/
-func (um *UserManager) Lock(mutex *bool) {
-	um.Debug("Thread is locked.")
-	for *mutex { time.Sleep(time.Duration(300) * time.Millisecond) }
-	um.Debug("Thread is unlocked.")
-}
-
-/**
- * Handles checking for debug mode and if so prints text.
- *
- **/
-func (um *UserManager) Debug(message string) {
-	if um.Debugging {
+// Handles checking for debug mode and if so prints text.
+func (um *UserManager) debug(message string) {
+	if um.Debug {
 		fmt.Println("[UserManager]: " + message)
 	}
 }
 
-/**
- * Hashes any given input using bcrypt.
- *
- **/
-func (um *UserManager) Hash(this []byte) []byte {
-	// cost: minimum is 4, max is 31, default is 10
-	// (https://godoc.org/golang.org/x/crypto/bcrypt)
-	cost := 10
+// Locks the running thread to prevent race conditions.
+// A boolean is provided as the responsible mutex. Usually it's
+// um.sessionsMutex or um.usersMutex.
+func (um *UserManager) lock(mutex *bool) {
+	um.debug("Thread is locked.")
 
-	hash, err := bcrypt.GenerateFromPassword(this, cost)
-	um.Check(err)
-
-	return hash
-}
-
-/**
- * Checks a hash against its possible plaintext. This exists because of
- * bcrypt's mechanism, we shouldn't just um.Hash() and check it ourselves.
- *
- **/
-func (um *UserManager) CheckHash(hash []byte, original []byte) bool {
-	if bcrypt.CompareHashAndPassword(hash, original) != nil {
-		return false
+	for *mutex {
+		time.Sleep(time.Duration(300) * time.Millisecond)
 	}
 
-	return true
+	um.debug("Thread is unlocked.")
 }
 
-/**
- * Internal UserManager error handling. Specifically, if a path error occurs
- * that means we just need to create the database. Furthermore in debug mode
- * a stdout message pops before panic()'ing, due to a panic possibility occuring
- * out of the blue.
- *
- **/
-func (um *UserManager) Check(err error) {
-	if err != nil {
-		if _, ok := err.(*os.PathError); ok {
-			um.Debug("Path error occured, creating database now.")
-			os.Create(um.DatabasePath)
-		} else {
-			um.Debug(err.Error() + "\nPanicking.")
-			panic(err)
-		}
-	}
-}
+// Reloads the database into memory, filling the appropriate variables.
+func (um *UserManager) reload() {
+	um.lock(&um.usersMutex)
+	um.usersMutex = true
 
-/**
- * Reloads the database into memory, filling the appropriate variables.
- *
- **/
-func (um *UserManager) Reload() {
-	um.Lock(&um.UsersMutex)
-	um.UsersMutex = true
+	um.users = make(map[string][]byte) // reset
 
-	um.Users = make(map[string][]byte) // reset
-
-	data, err := ioutil.ReadFile(um.DatabasePath)
-	um.Check(err)
+	data, err := ioutil.ReadFile(um.databasePath)
+	um.check(err)
 
 	accounts := strings.Split(string(data), "\n")
 	for _, acc := range accounts {
 		creds := strings.Split(acc, ":")
 
 		if len(creds) != 2 {
-			// at times for unknown reasons the length of creds is 1
-			// which causes an unchecked panic to pop. it shouldn't mind us.
 			break
 		}
 
-		um.Users[creds[0]] = []byte(creds[1])
+		um.users[creds[0]] = []byte(creds[1])
 	}
 
-	um.UsersMutex = false
+	um.usersMutex = false
 }
 
-/**
- * Registers a new User, writing both into the database file and the memory.
- *
- **/
-func (um *UserManager) Register(user string, pass string) bool {
-	if _, exists := um.Users[user]; exists || user == "" || pass == "" {
-		return false
-	}
-
-	um.Lock(&um.UsersMutex)
-	um.UsersMutex = true
-	um.Users[user] = um.Hash([]byte(pass))
-	um.UsersMutex = false
-
-	pass = string(um.Users[user])
-
-	f, err := os.OpenFile(um.DatabasePath, os.O_APPEND|os.O_WRONLY, 0666)
-	defer f.Close()
-	um.Check(err)
-
-	_, err = f.WriteString(user + ":" + pass + "\n")
-	um.Check(err)
-
-	um.Debug("Registered user[" + user + "] with password[" + pass + "].")
-	return true
-}
-
-/**
- * Changes the password of a User, given his old password matches the oldpass input variable.
- * Writes both into the database file and the memory.
- *
- * Returns false if the old password given doesn't match the actual old password, or User
- * doesn't exist.
- *
- **/
-func (um *UserManager) ChangePass(user string, oldpass string, newpass string) bool {
-	if newpass != "" && um.CheckHash(um.Users[user], []byte(oldpass)) {
-		oldpass := string(um.Users[user])
-
-		um.Lock(&um.UsersMutex)
-		um.UsersMutex = true
-		um.Users[user] = um.Hash([]byte(newpass))
-		um.UsersMutex = false
-
-		newpass = string(um.Users[user])
-
-		data, err := ioutil.ReadFile(um.DatabasePath)
-		um.Check(err)
-
-		lines := strings.Split(string(data), "\n")
-		for i, line := range lines {
-			if strings.Contains(line, user) && strings.Contains(line, oldpass) {
-				lines[i] = user + ":" + newpass
-				break
-			}
-		}
-
-		output := strings.Join(lines, "\n")
-		err = ioutil.WriteFile(um.DatabasePath, []byte(output), 0666)
-		um.Check(err)
-
-		um.Debug("Changed the password of user[" + user + "],\n\t" +
-			"from[" + oldpass + "] to[" + newpass + "].")
-		return true
-	}
-
-	um.Debug("Failed to change the password of User[" + user + "].")
-	return false
-}
-
-/**
- * Checks for expired Sessions.
- *
- **/
-func (um *UserManager) CheckSessions() {
+// Checks for expired Sessions.
+func (um *UserManager) checkSessions() {
 	for {
-		for hash, sess := range um.Sessions {
+		for hash, sess := range um.sessions {
 			if sess.Timestamp+sess.Lifespan < time.Now().Unix() {
-				um.Lock(&um.SessionsMutex)
-				um.SessionsMutex = true
+				um.lock(&um.sessionsMutex)
+				um.sessionsMutex = true
 
-				um.Debug("Session[" + hash + "] has expired.")
-				delete(um.Sessions, hash)
+				um.debug("Session[" + hash + "] has expired.")
+				delete(um.sessions, hash)
 
-				um.SessionsMutex = false
+				um.sessionsMutex = false
 			}
 		}
 
@@ -300,47 +164,77 @@ func (um *UserManager) CheckSessions() {
 	}
 }
 
-/**
- * Uses SHA256 to hash a Session token (the sum of identifiers).
- *
- **/
-func (um *UserManager) HashHTTPSessionToken(ua string, ip string) string {
+// Hashes any given input using bcrypt.
+func (um *UserManager) hash(this []byte) []byte {
+	// cost: minimum is 4, max is 31, default is 10
+	// (https://godoc.org/golang.org/x/crypto/bcrypt)
+	cost := 10
+
+	hash, err := bcrypt.GenerateFromPassword(this, cost)
+	um.check(err)
+
+	return hash
+}
+
+// CheckHash checks a hash against its possible plaintext. This exists because of
+// bcrypt's mechanism, we shouldn't just um.hash() and check it ourselves.
+func (um *UserManager) checkHash(hash []byte, original []byte) bool {
+	if bcrypt.CompareHashAndPassword(hash, original) != nil {
+		return false
+	}
+
+	return true
+}
+
+// Check is for internal UserManager error handling. Specifically, if a path error occurs
+// that means we just need to create the database. Furthermore in debug mode
+// a stdout message pops before panic()'ing, due to a panic possibility occurring
+// out of the blue.
+func (um *UserManager) check(err error) {
+	if err != nil {
+		if _, ok := err.(*os.PathError); ok {
+			um.debug("Path error occured, creating database now.")
+			os.Create(um.databasePath)
+		} else {
+			um.debug(err.Error() + "\nPanicking.")
+			panic(err)
+		}
+	}
+}
+
+// Uses SHA256 to hash a Session token (the sum of identifiers).
+func (um *UserManager) hashHTTPSessionToken(ua string, ip string) string {
 	hash := sha256.New()
 	hash.Write([]byte(ua + ip))
-	
+
 	return hex.EncodeToString(hash.Sum(nil))
 }
 
-/**
- * Generates a unique cookie hash (it keeps trying if not).
- *
- **/
-func (um *UserManager) GenerateCookieHash() string {
+// Generates a unique cookie hash (it keeps trying if not).
+func (um *UserManager) generateCookieHash() string {
 	randBytes := make([]byte, 32)
 	_, err := rand.Read(randBytes)
-	um.Check(err)
+	um.check(err)
 
-    hash := sha256.New()
-    hash.Write(randBytes)
-    
-    result := hex.EncodeToString(hash.Sum(nil))
-    for _, sess := range um.Sessions {
-    	if sess.Cookie == result {
-    		return um.GenerateCookieHash()
-    	}
-    }
+	hash := sha256.New()
+	hash.Write(randBytes)
 
-    return result
+	result := hex.EncodeToString(hash.Sum(nil))
+	for _, sess := range um.sessions {
+		if sess.Cookie == result {
+			return um.generateCookieHash()
+		}
+	}
+
+	return result
 }
 
-/**
- * This function is made for HTTP oriented sessions.
- * It attempts to find an existing Session. If it exists, it validates
- * the given cookie (from the Request). If vaildation fails it's like the
- * Session never existed in the first place, having a fresh one taking its
- * place. Returns nil if http.Request or http.ResponseWriter are nil.
- *
- **/
+// GetHTTPSession is made for HTTP oriented sessions.
+// It attempts to find an existing Session. If it exists, it validates
+// the given cookie (from the Request). If vaildation fails it's like the
+// Session never existed in the first place, having a fresh one taking its
+// place. Returns nil if either http.Request or http.ResponseWriter are nil.
+//
 func (um *UserManager) GetHTTPSession(w http.ResponseWriter, r *http.Request) *Session {
 	if r == nil || w == nil {
 		return nil
@@ -359,9 +253,9 @@ func (um *UserManager) GetHTTPSession(w http.ResponseWriter, r *http.Request) *S
 		ip = chopped[0]
 	}
 
-	hash := um.HashHTTPSessionToken(r.UserAgent(), ip)
+	hash := um.hashHTTPSessionToken(r.UserAgent(), ip)
 
-	if sess, exists := um.Sessions[hash]; exists {
+	if sess, exists := um.sessions[hash]; exists {
 		userCookie, err := r.Cookie("session")
 
 		if err == nil && userCookie.Value == sess.Cookie {
@@ -369,49 +263,113 @@ func (um *UserManager) GetHTTPSession(w http.ResponseWriter, r *http.Request) *S
 		}
 	}
 
-	um.Lock(&um.SessionsMutex)
-	um.SessionsMutex = true
-	um.Sessions[hash] = CreateSession()
-	um.SessionsMutex = false
+	um.lock(&um.sessionsMutex)
+	um.sessionsMutex = true
+	um.sessions[hash] = createSession()
+	um.sessionsMutex = false
 
-	sess := um.Sessions[hash]
-	
-	sess.Cookie = um.GenerateCookieHash()
+	sess := um.sessions[hash]
+
+	sess.Cookie = um.generateCookieHash()
 	sess.SetHTTPCookie(w)
-	
+
 	return sess
 }
 
-/**
- * This function is made for the non cookie (abstract) mode. If a Session is not
- * found a new one takes its place.
- *
- **/
+// GetSessionFromID is made for abstraction. One could produce IDs given
+// unique user oriented identifying elements. If a Session is not found
+// a new one takes its place and gets returned.
+//
 func (um *UserManager) GetSessionFromID(id string) *Session {
-	if sess, exists := um.Sessions[id]; exists {
+	if sess, exists := um.sessions[id]; exists {
 		return sess
 	}
 
-	um.Lock(&um.SessionsMutex)
-	um.SessionsMutex = true
-	um.Sessions[id] = CreateSession()
-	um.SessionsMutex = false
+	um.lock(&um.sessionsMutex)
+	um.sessionsMutex = true
+	um.sessions[id] = createSession()
+	um.sessionsMutex = false
 
-	return um.Sessions[id]
+	return um.sessions[id]
 }
 
-/**
- * Pretty simple.
- *
- **/
-func (um *UserManager) Login(user string, pass string, sess *Session) bool {
-	if user != "" && pass != "" && um.CheckHash(um.Users[user], []byte(pass)) {
-		sess.User = user
+// Register registers a new user, writing both into the database file and the memory.
+// Returns false if the user exists already.
+//
+func (um *UserManager) Register(user string, pass string) bool {
+	if _, exists := um.users[user]; exists || user == "" || pass == "" {
+		return false
+	}
 
-		um.Debug("User[" + user + "] has logged in.")
+	um.lock(&um.usersMutex)
+	um.usersMutex = true
+	um.users[user] = um.hash([]byte(pass))
+	um.usersMutex = false
+
+	pass = string(um.users[user])
+
+	f, err := os.OpenFile(um.databasePath, os.O_APPEND|os.O_WRONLY, 0666)
+	defer f.Close()
+	um.check(err)
+
+	_, err = f.WriteString(user + ":" + pass + "\n")
+	um.check(err)
+
+	um.debug("Registered user[" + user + "] with password[" + pass + "].")
+	return true
+}
+
+// ChangePass changes the password of a user, given his old password matches the oldpass
+// string variable. Writes both into the database file and the memory.
+//
+// Returns false if the old password given doesn't match the actual old password, or User
+// doesn't exist.
+//
+func (um *UserManager) ChangePass(user string, oldpass string, newpass string) bool {
+	if newpass != "" && um.checkHash(um.users[user], []byte(oldpass)) {
+		oldpass := string(um.users[user])
+
+		um.lock(&um.usersMutex)
+		um.usersMutex = true
+		um.users[user] = um.hash([]byte(newpass))
+		um.usersMutex = false
+
+		newpass = string(um.users[user])
+
+		data, err := ioutil.ReadFile(um.databasePath)
+		um.check(err)
+
+		lines := strings.Split(string(data), "\n")
+		for i, line := range lines {
+			if strings.Contains(line, user) && strings.Contains(line, oldpass) {
+				lines[i] = user + ":" + newpass
+				break
+			}
+		}
+
+		output := strings.Join(lines, "\n")
+		err = ioutil.WriteFile(um.databasePath, []byte(output), 0666)
+		um.check(err)
+
+		um.debug("Changed the password of user[" + user + "],\n\t" +
+			"from[" + oldpass + "] to[" + newpass + "].")
 		return true
 	}
 
-	um.Debug("User[" + user + "] failed to log in.")
+	um.debug("Failed to change the password of User[" + user + "].")
+	return false
+}
+
+// Login logs a user in given his credentials.
+//
+func (um *UserManager) Login(user string, pass string, sess *Session) bool {
+	if user != "" && pass != "" && um.checkHash(um.users[user], []byte(pass)) {
+		sess.User = user
+
+		um.debug("User[" + user + "] has logged in.")
+		return true
+	}
+
+	um.debug("User[" + user + "] failed to log in.")
 	return false
 }
