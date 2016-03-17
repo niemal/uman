@@ -113,13 +113,13 @@ func New(databasePath string) *UserManager {
 
 
 /**
- * Locks the running thread.
+ * Locks the running thread to prevent race conditions.
  *
  **/
 func (um *UserManager) Lock(mutex *bool) {
 	um.Debug("Thread is locked.")
-	for *mutex { time.Sleep(time.Duration(1) * time.Second) }
-	um.Debug("Thread is Unlocked.")
+	for *mutex { time.Sleep(time.Duration(300) * time.Millisecond) }
+	um.Debug("Thread is unlocked.")
 }
 
 /**
