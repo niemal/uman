@@ -24,8 +24,6 @@ type UserManager struct {
 	sessionsMutex bool
 	usersMutex    bool
 }
-}
-
 ```
 
 `CheckDelay` states the cooldown of the thread responsible for handling session cleanup.
