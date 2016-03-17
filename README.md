@@ -1,7 +1,7 @@
 # uman
-A hacky user manager, using a "CSV"-like format (`user:passhash\n`) to store/load the database into/from a file.
-The idea is to create an abstract yet adaptive, as minimal as possible, full-backend user manager.
-Handling user management under the actual server software might come in handy and *fast*.
+A thread-safe user manager, using a simple format (`user:passhash\n`) to store/load the database into/from a file.
+It can be used in any type of server, with HTTP being the only protocol to have a special feature (cookies, uses `net/http`).
+The idea is to create an abstract yet adaptive, as minimal as possible user manager.
 
 
 ## API
