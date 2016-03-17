@@ -10,24 +10,27 @@ The idea is to create an abstract yet adaptive, as minimal as possible user mana
 One would need to call the constructor, which is the function below.
 A string must be passed which states the database path to be created or used (both hanlded internally).
 ```go
-func New(databasePath string) *UserManager
+func New(dbPath string) *UserManager
 ```
 
 The UserManager struct:
 ```go
 type UserManager struct {
-	Users          map[string][]byte
-	DatabasePath   string
-	Sessions       map[string]*Session
-	CheckDelay     int
-	SessionsMutex  bool
-	UsersMutex     bool
-	Debugging      bool
+	CheckDelay    int
+	Debug         bool
+	users         map[string][]byte
+	sessions      map[string]*Session
+	databasePath  string
+	sessionsMutex bool
+	usersMutex    bool
+}
 }
 
 ```
 
-`CheckDelay` states the cooldown of the thread responsible for handling session cleanup. Can be changed after initialization.
+`CheckDelay` states the cooldown of the thread responsible for handling session cleanup.
+`Debug` is used for debug mode.
+Both can be changed after initialisation.
 
 ### Database structure
 Currently it is kept as minimal as possible, using `user:passhash\n` text entries.
@@ -60,13 +63,13 @@ There are 2 functions which you can use to retrieve a session.
 ```go
 func (um *UserManager) GetSessionFromID(id string) *Session
 ```
-The `GetSessionFromID` function attempts to find an existing session, given its identifier `id string`.
+The `UserManager.GetSessionFromID` function attempts to find an existing session, given its identifier `id string`.
 If no matching session is found, a new one is created and returned.
 
 ```go
 func (um *UserManager) GetHTTPSession(w http.ResponseWriter, r *http.Request) *Session
 ```
-The `GetHTTPSession` function is made to handle HTTP oriented type of sessions and internally also handles
+The `UserManager.GetHTTPSession` function is made to handle HTTP oriented type of sessions and internally also handles
 cookie distribution and management. It produces a **SHA256 hash** by combining the user's agent and IP strings so the user
 becomes trackable in the future. Furthermore, it also sets a cookie (if the session is new) of which the value is
 a **unique** (it keeps trying to create a hash if collisions happen) pseudo-random **SHA256 hash** hex string.
@@ -85,18 +88,18 @@ type Session struct {
 }
 ```
 If a user is not logged in then the `Session.User` is just an empty string, otherwise it's the user's name.
-If `GetHTTPSession()` is not being used then the `Session.Cookie` will always be an empty string.
+If `UserManager.GetHTTPSession` is not being used then the `Session.Cookie` will always be an empty string.
 
 Functions related:
 ```go
 func (sess *Session) SetHTTPCookie(w http.ResponseWriter)
 ```
-Sets the appropriate cookie. You may set a `Session.CookiePath` (default is "/") before using `Session.SetHTTPCookie()`.
+Sets the appropriate cookie. You may set a `Session.CookiePath` (default is "/") before using `Session.SetHTTPCookie`.
 
 ```go
 func (sess *Session) SetLifespan(seconds int)
 ```
-Sets the lifespan of a session. If using HTTP oriented sessions, you should also use `SetHTTPCookie()` after using this function.
+Sets the lifespan of a session. If using HTTP oriented sessions, you should also use `Session.SetHTTPCookie` after using this function.
 
 ```go
 func (sess *Session) IsLogged() bool
