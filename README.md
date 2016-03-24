@@ -34,9 +34,10 @@ Both can be changed after initialisation.
 Currently it is kept as minimal as possible, using `user:passhash\n` text entries.
 Option to use SQL type of engines/drivers is considered for the future.
 
+**Note:** `uman` uses `bcrypt` for password hashing.
+
 ### Database interaction
-There are 2 functions which act as middlemen between you and the database.
-More might be added later on (`Delete` is in mind).
+There are 3 functions which act as middlemen between you and the database.
 
 First, one would need to register a user.
 ```go
@@ -50,7 +51,10 @@ Notice: The old password is required for security sake.
 func (um *UserManager) ChangePass(user string, oldpass string, newpass string) bool
 ```
 
-**Note:** `uman` uses `bcrypt` for password hashing.
+Last but not least you can delete a user. Returns false if the user didn't exist.
+```go
+func (um *UserManager) Delete(user string) bool
+```
 
 ### Session handling
 `uman` handles sessions for you, while you can also implement your special session handling or even
