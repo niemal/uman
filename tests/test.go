@@ -17,6 +17,9 @@ func main() {
 
 	um := uman.New("my.db")
 	um.Register("admin", "test")
+	um.Delete("test")
+	um.Register("test", "test2")
+	um.Delete("test")
 
 	getRoutes := callbacks{
 		"/": func(c *gin.Context) {
