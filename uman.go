@@ -375,53 +375,29 @@ func (um *UserManager) ChangePass(user string, oldpass string, newpass string) b
 	return false
 }
 
-// Delete deletes a user given his name.
+// Delete deletes a user given his name. Returns false if the user didn't exist.
 //
 func (um *UserManager) Delete(user string) bool {
-	exists := -1
+	if _, exists := um.users[user]; !exists {
+		um.debug("Attempted to delete unknown user[" + user + "].")
+		return false
+	}
 
-	data, err := ioutil.ReadFile(um.databasePath)
+	um.lock(&um.usersMutex)
+	um.usersMutex = true
+	delete(um.users, user)
+	um.usersMutex = false
+
+	var output string
+	for user, pass := range um.users {
+		output += user + ":" + string(pass) + "\n"
+	}
+
+	err := ioutil.WriteFile(um.databasePath, []byte(output), 0666)
 	um.check(err)
 
-	lines := strings.Split(string(data), "\n")
-
-	var creds []string
-	for i, line := range lines {
-		creds = strings.Split(line, ":")
-
-		if len(creds) != 2 {
-			continue
-		}
-
-		if creds[0] == user {
-			exists = i
-			break
-		}
-	}
-
-	if exists > -1 {
-		um.lock(&um.usersMutex)
-		um.usersMutex = true
-		delete(um.users, user)
-		um.usersMutex = false
-
-		for _, sess := range um.sessions {
-			if sess.User == user {
-				sess.Logout()
-			}
-		}
-
-		lines = append(lines[:exists], lines[exists+1:]...)
-		output := strings.Join(lines, "\n")
-		err = ioutil.WriteFile(um.databasePath, []byte(output), 0666)
-		um.check(err)
-
-		um.debug("Deleted user[" + user + "].")
-		return true
-	}
-
-	um.debug("Attempted to delete unknown user[" + user + "].")
-	return false
+	um.debug("Deleted user[" + user + "].")
+	return true
 }
 
 // Login logs a user in given his credentials.
